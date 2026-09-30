@@ -1,0 +1,20 @@
+# Build output directories
+build/
+bin/
+obj/
+
+# Generated binaries and map files
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.obj
+*.d
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
