@@ -40,7 +40,8 @@ add_link_options(
     -Wl,--gc-sections 
     -specs=nano.specs 
     -specs=nosys.specs 
-    -Wl,-Map=${PROJECT_NAME}.map
+    -Wl,-T,${CMAKE_SOURCE_DIR}/STM32F446RETx_FLASH.ld
+    -Wl,-Map=${CMAKE_BINARY_DIR}/${PROJECT_NAME}.map
 )
 
 # Include Directories
@@ -53,6 +54,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Device/ST/STM32F4xx/Include
     ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Include
     ${CMAKE_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/include
+    ${CMAKE_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2
     ${CMAKE_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F
 )
 
@@ -67,6 +69,9 @@ list(FILTER HAL_SOURCES EXCLUDE REGEX ".*_template\\.c$")
 
 # CMSIS System Source File (Defines SystemCoreClock & AHBPrescTable)
 file(GLOB_RECURSE CMSIS_SOURCES "${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/system_stm32f4xx.c")
+set(STARTUP_SOURCE
+    "${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/gcc/startup_stm32f446xx.s"
+)
 
 # FreeRTOS Sources
 file(GLOB FREERTOS_SOURCES "${CMAKE_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/*.c")
@@ -77,6 +82,7 @@ set(FREERTOS_PORT_SOURCES
 
 # Combine all source files
 set(SOURCES
+    ${STARTUP_SOURCE}
     ${CORE_SOURCES}
     ${APP_SOURCES}
     ${BSP_SOURCES}
@@ -87,6 +93,9 @@ set(SOURCES
 )
 
 add_executable(${PROJECT_NAME}.elf ${SOURCES})
+set_property(TARGET ${PROJECT_NAME}.elf APPEND PROPERTY LINK_DEPENDS
+    "${CMAKE_SOURCE_DIR}/STM32F446RETx_FLASH.ld"
+)
 
 # Post-build binary & size generation
 add_custom_command(TARGET ${PROJECT_NAME}.elf POST_BUILD

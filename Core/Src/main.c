@@ -4,7 +4,7 @@
 #include "task.h"
 #include "semphr.h"
 #include "queue.h"
-
+#include "string.h"
 #include "ds3231.h"
 #include "adxl345.h"
 #include "max7219.h"
@@ -31,6 +31,7 @@ static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
+static void Boot_Status_Blink(void);
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
     (void)xTask;
@@ -40,49 +41,68 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
     for (;;);
 }
 
-
+void Error_Handler(void) {
+    __disable_irq();
+    while (1) {
+        /* Trap CPU on fatal errors */
+    }
+}
 /**
   * @brief Application Entry Point
   */
-int main(void) {
-    /* Reset all peripherals, Initializes Flash interface and SysTick */
-    HAL_Init();
 
-    /* Configure System Clock to 180 MHz */
+int main(void)
+{
+    HAL_Init();
+    Boot_Status_Blink();
     SystemClock_Config();
 
-    /* Initialize Peripherals */
     MX_GPIO_Init();
     MX_DMA_Init();
     MX_I2C1_Init();
     MX_SPI1_Init();
     MX_USART2_UART_Init();
 
-    /* Initialize Display Handle */
     hmax7219.hspi = &hspi1;
-    hmax7219.cs_port = GPIOB;  //PB6 is DB10 on STM32F446 Nucleo-64
+    hmax7219.cs_port = GPIOB;
     hmax7219.cs_pin = GPIO_PIN_6;
     MAX7219_Init(&hmax7219, 0x07);
 
-    /* Initialize Sensors */
     DS3231_Init(&hi2c1);
     ADXL345_Init(&hi2c1, ADXL345_RANGE_4G);
 
-    /* Create FreeRTOS Mutexes and Queues */
     xI2CBusMutex = xSemaphoreCreateMutex();
     xSensorDataQueue = xQueueCreate(5, sizeof(SensorData_t));
-
-    if (xI2CBusMutex != NULL && xSensorDataQueue != NULL) {
-        /* Spawn FreeRTOS Tasks */
-        xTaskCreate(vTaskSensors, "SensorsTask", 512, NULL, 2, NULL);
-        xTaskCreate(vTaskDisplay, "DisplayTask", 512, NULL, 1, NULL);
-        xTaskCreate(vTaskCLI,     "CLITask",     512, NULL, 3, NULL);
-
-        /* Start Scheduler */
-        vTaskStartScheduler();
+    if (xI2CBusMutex == NULL || xSensorDataQueue == NULL) {
+        Error_Handler();
     }
 
-    while (1) {
+    if (xTaskCreate(vTaskSensors, "SensorsTask", 512, NULL, 2, NULL) != pdPASS ||
+        xTaskCreate(vTaskDisplay, "DisplayTask", 512, NULL, 1, NULL) != pdPASS ||
+        xTaskCreate(vTaskCLI, "CLITask", 512, NULL, 3, NULL) != pdPASS) {
+        Error_Handler();
+    }
+
+    vTaskStartScheduler();
+    Error_Handler();
+}
+
+static void Boot_Status_Blink(void)
+{
+    GPIO_InitTypeDef gpio_led = {0};
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    gpio_led.Pin = GPIO_PIN_5;
+    gpio_led.Mode = GPIO_MODE_OUTPUT_PP;
+    gpio_led.Pull = GPIO_NOPULL;
+    gpio_led.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOA, &gpio_led);
+
+    for (uint8_t blink = 0; blink < 3; ++blink) {
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+        HAL_Delay(100);
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+        HAL_Delay(100);
     }
 }
 
@@ -97,7 +117,7 @@ void SystemClock_Config(void) {
     __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-    RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+    RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
     RCC_OscInitStruct.PLL.PLLM = 8;
@@ -106,11 +126,11 @@ void SystemClock_Config(void) {
     RCC_OscInitStruct.PLL.PLLQ = 2;
     RCC_OscInitStruct.PLL.PLLR = 2;
     if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
-        while(1);
+        Error_Handler();
     }
 
     if (HAL_PWREx_EnableOverDrive() != HAL_OK) {
-        while(1);
+        Error_Handler();
     }
 
     RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
@@ -121,7 +141,7 @@ void SystemClock_Config(void) {
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
     if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK) {
-        while(1);
+        Error_Handler();
     }
 }
 
@@ -180,6 +200,60 @@ static void MX_SPI1_Init(void) {
         while(1);
     }
 }
+
+void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C1) {
+        GPIO_InitTypeDef gpio = {0};
+
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+        __HAL_RCC_I2C1_CLK_ENABLE();
+
+        gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9;
+        gpio.Mode = GPIO_MODE_AF_OD;
+        gpio.Pull = GPIO_PULLUP;
+        gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        gpio.Alternate = GPIO_AF4_I2C1;
+        HAL_GPIO_Init(GPIOB, &gpio);
+    }
+}
+
+void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == SPI1) {
+        GPIO_InitTypeDef gpio = {0};
+
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        __HAL_RCC_SPI1_CLK_ENABLE();
+
+        gpio.Pin = GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
+        gpio.Mode = GPIO_MODE_AF_PP;
+        gpio.Pull = GPIO_NOPULL;
+        gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        gpio.Alternate = GPIO_AF5_SPI1;
+        HAL_GPIO_Init(GPIOA, &gpio);
+    }
+}
+
+void HAL_UART_MspInit(UART_HandleTypeDef* huart) {
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    if (huart->Instance == USART2) {
+        /* Enable Peripheral Clocks */
+        __HAL_RCC_USART2_CLK_ENABLE();
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+
+        /**USART2 GPIO Configuration
+        PA2     ------> USART2_TX
+        PA3     ------> USART2_RX
+        */
+        GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_3;
+        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
+        HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    }
+    }
 
 /**
   * @brief USART2 Initialization (PA2 -> TX, PA3 -> RX)
