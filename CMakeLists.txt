@@ -38,6 +38,7 @@ add_compile_options(
 add_link_options(
     ${CPU_PARAMETERS} 
     -Wl,--gc-sections 
+    -u _printf_float
     -specs=nano.specs 
     -specs=nosys.specs 
     -Wl,-T,${CMAKE_SOURCE_DIR}/STM32F446RETx_FLASH.ld

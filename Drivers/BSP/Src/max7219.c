@@ -18,11 +18,11 @@ inline void MAX7219_CS_Deselect(MAX7219_HandleTypeDef *hmax) {
   * @brief  Write a single 16-bit register packet to MAX7219 (Blocking setup mode)
   */
 HAL_StatusTypeDef MAX7219_WriteRegister(MAX7219_HandleTypeDef *hmax, uint8_t reg, uint8_t data) {
-    uint8_t packet[2] = {reg, data};
+  uint16_t packet = ((uint16_t)reg << 8) | data;
     HAL_StatusTypeDef status;
 
     MAX7219_CS_Select(hmax);
-    status = HAL_SPI_Transmit(hmax->hspi, packet, 2, 100);
+  status = HAL_SPI_Transmit(hmax->hspi, (uint8_t *)&packet, 1, 100);
     MAX7219_CS_Deselect(hmax);
 
     return status;

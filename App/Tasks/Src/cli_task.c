@@ -55,14 +55,20 @@ static void CLI_ProcessCommand(char *cmd) {
     } 
     else if (strcmp(cmd, "get-time") == 0) {
         if (xSemaphoreTake(xI2CBusMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            uint8_t raw_time[7];
+            uint8_t raw_time[7] = {0};
             DS3231_Time_t t;
-            HAL_I2C_Mem_Read(&hi2c1, DS3231_I2C_ADDR, DS3231_REG_SECONDS, I2C_MEMADD_SIZE_8BIT, raw_time, 7, 100);
-            DS3231_ParseTime(raw_time, &t);
+            HAL_StatusTypeDef status = HAL_I2C_Mem_Read(&hi2c1, DS3231_I2C_ADDR, DS3231_REG_SECONDS, I2C_MEMADD_SIZE_8BIT, raw_time, 7, 100);
             xSemaphoreGive(xI2CBusMutex);
 
-            snprintf(out_buf, sizeof(out_buf), "\r\n[RTC Time] %02d:%02d:%02d | Date: 20%02d-%02d-%02d\r\n", 
-                     t.hours, t.minutes, t.seconds, t.year, t.month, t.date);
+            if (status == HAL_OK) {
+                DS3231_ParseTime(raw_time, &t);
+                snprintf(out_buf, sizeof(out_buf), "\r\n[RTC Time] %02u:%02u:%02u | Date: 20%02u-%02u-%02u\r\n",
+                         (unsigned)t.hours, (unsigned)t.minutes, (unsigned)t.seconds,
+                         (unsigned)t.year, (unsigned)t.month, (unsigned)t.date);
+            } else {
+                snprintf(out_buf, sizeof(out_buf), "\r\n[RTC I2C error] status=%u error=0x%08lx\r\n",
+                         (unsigned)status, (unsigned long)HAL_I2C_GetError(&hi2c1));
+            }
             CLI_Print(out_buf);
         } else {
             CLI_Print("\r\n[Error] I2C Bus Busy\r\n");
@@ -70,14 +76,19 @@ static void CLI_ProcessCommand(char *cmd) {
     } 
     else if (strcmp(cmd, "get-accel") == 0) {
         if (xSemaphoreTake(xI2CBusMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            uint8_t raw_accel[6];
+            uint8_t raw_accel[6] = {0};
             ADXL345_Data_t accel;
-            HAL_I2C_Mem_Read(&hi2c1, ADXL345_I2C_ADDR, ADXL345_REG_DATAX0, I2C_MEMADD_SIZE_8BIT, raw_accel, 6, 100);
-            ADXL345_ParseData(raw_accel, &accel);
+            HAL_StatusTypeDef status = HAL_I2C_Mem_Read(&hi2c1, ADXL345_I2C_ADDR, ADXL345_REG_DATAX0, I2C_MEMADD_SIZE_8BIT, raw_accel, 6, 100);
             xSemaphoreGive(xI2CBusMutex);
 
-            snprintf(out_buf, sizeof(out_buf), "\r\n[Accel mg] X: %.1f mg | Y: %.1f mg | Z: %.1f mg\r\n", 
-                     accel.x_mg, accel.y_mg, accel.z_mg);
+            if (status == HAL_OK) {
+                ADXL345_ParseData(raw_accel, &accel);
+                snprintf(out_buf, sizeof(out_buf), "\r\n[Accel mg] X: %.1f mg | Y: %.1f mg | Z: %.1f mg\r\n",
+                         (double)accel.x_mg, (double)accel.y_mg, (double)accel.z_mg);
+            } else {
+                snprintf(out_buf, sizeof(out_buf), "\r\n[ADXL345 I2C error] status=%u error=0x%08lx\r\n",
+                         (unsigned)status, (unsigned long)HAL_I2C_GetError(&hi2c1));
+            }
             CLI_Print(out_buf);
         } else {
             CLI_Print("\r\n[Error] I2C Bus Busy\r\n");

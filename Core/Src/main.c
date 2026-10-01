@@ -32,6 +32,10 @@ static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void Boot_Status_Blink(void);
+static void Debug_Print(const char *message);
+static void MAX7219_RunSelfTest(void);
+static void vTaskAlphabetDisplay(void *pvParameters);
+void xPortSysTickHandler(void);
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
     (void)xTask;
@@ -47,6 +51,15 @@ void Error_Handler(void) {
         /* Trap CPU on fatal errors */
     }
 }
+
+void SysTick_Handler(void)
+{
+  HAL_IncTick();
+  if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED) {
+    xPortSysTickHandler();
+  }
+}
+
 /**
   * @brief Application Entry Point
   */
@@ -59,14 +72,18 @@ int main(void)
 
     MX_GPIO_Init();
     MX_DMA_Init();
-    MX_I2C1_Init();
-    MX_SPI1_Init();
     MX_USART2_UART_Init();
+    Debug_Print("\r\nUSART2 initialized\r\n");
+
+    MX_I2C1_Init();
+    Debug_Print("I2C1 initialized\r\n");
+    MX_SPI1_Init();
+    Debug_Print("SPI1 initialized\r\n");
 
     hmax7219.hspi = &hspi1;
     hmax7219.cs_port = GPIOB;
     hmax7219.cs_pin = GPIO_PIN_6;
-    MAX7219_Init(&hmax7219, 0x07);
+    MAX7219_RunSelfTest();
 
     DS3231_Init(&hi2c1);
     ADXL345_Init(&hi2c1, ADXL345_RANGE_4G);
@@ -79,6 +96,7 @@ int main(void)
 
     if (xTaskCreate(vTaskSensors, "SensorsTask", 512, NULL, 2, NULL) != pdPASS ||
         xTaskCreate(vTaskDisplay, "DisplayTask", 512, NULL, 1, NULL) != pdPASS ||
+      xTaskCreate(vTaskAlphabetDisplay, "AlphabetTask", 512, NULL, 1, NULL) != pdPASS ||
         xTaskCreate(vTaskCLI, "CLITask", 512, NULL, 3, NULL) != pdPASS) {
         Error_Handler();
     }
@@ -86,6 +104,83 @@ int main(void)
     vTaskStartScheduler();
     Error_Handler();
 }
+
+  static void Debug_Print(const char *message)
+  {
+    HAL_UART_Transmit(&huart2, (uint8_t *)message, (uint16_t)strlen(message), HAL_MAX_DELAY);
+  }
+
+  static void MAX7219_RunSelfTest(void)
+  {
+    static const uint8_t x_pattern[8] = {
+      0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81
+    };
+
+    if (MAX7219_Init(&hmax7219, 0x07) != HAL_OK ||
+      MAX7219_WriteRegister(&hmax7219, MAX7219_REG_DISPLAY_TEST, 0x01) != HAL_OK) {
+      Error_Handler();
+    }
+
+    Debug_Print("MAX7219 display test: all LEDs for 500 ms\r\n");
+    HAL_Delay(500);
+
+    if (MAX7219_WriteRegister(&hmax7219, MAX7219_REG_DISPLAY_TEST, 0x00) != HAL_OK) {
+      Error_Handler();
+    }
+
+    for (uint8_t row = 0; row < 8; ++row) {
+      if (MAX7219_WriteRegister(&hmax7219, MAX7219_REG_DIGIT0 + row, x_pattern[row]) != HAL_OK) {
+        Error_Handler();
+      }
+    }
+
+    Debug_Print("MAX7219 test pattern sent\r\n");
+  }
+
+  static void vTaskAlphabetDisplay(void *pvParameters)
+  {
+    static const uint8_t alphabet[26][8] = {
+      {0x18, 0x24, 0x42, 0x42, 0x7E, 0x42, 0x42, 0x00},
+      {0x7C, 0x42, 0x42, 0x7C, 0x42, 0x42, 0x7C, 0x00},
+      {0x3C, 0x42, 0x40, 0x40, 0x40, 0x42, 0x3C, 0x00},
+      {0x78, 0x44, 0x42, 0x42, 0x42, 0x44, 0x78, 0x00},
+      {0x7E, 0x40, 0x40, 0x7C, 0x40, 0x40, 0x7E, 0x00},
+      {0x7E, 0x40, 0x40, 0x7C, 0x40, 0x40, 0x40, 0x00},
+      {0x3C, 0x42, 0x40, 0x4E, 0x42, 0x42, 0x3C, 0x00},
+      {0x42, 0x42, 0x42, 0x7E, 0x42, 0x42, 0x42, 0x00},
+      {0x3C, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00},
+      {0x1E, 0x04, 0x04, 0x04, 0x44, 0x44, 0x38, 0x00},
+      {0x42, 0x44, 0x48, 0x70, 0x48, 0x44, 0x42, 0x00},
+      {0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x7E, 0x00},
+      {0x42, 0x66, 0x5A, 0x5A, 0x42, 0x42, 0x42, 0x00},
+      {0x42, 0x62, 0x52, 0x4A, 0x46, 0x42, 0x42, 0x00},
+      {0x3C, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00},
+      {0x7C, 0x42, 0x42, 0x7C, 0x40, 0x40, 0x40, 0x00},
+      {0x3C, 0x42, 0x42, 0x42, 0x4A, 0x44, 0x3A, 0x00},
+      {0x7C, 0x42, 0x42, 0x7C, 0x48, 0x44, 0x42, 0x00},
+      {0x3C, 0x42, 0x40, 0x3C, 0x02, 0x42, 0x3C, 0x00},
+      {0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00},
+      {0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00},
+      {0x42, 0x42, 0x42, 0x42, 0x24, 0x24, 0x18, 0x00},
+      {0x42, 0x42, 0x42, 0x5A, 0x5A, 0x66, 0x42, 0x00},
+      {0x42, 0x24, 0x18, 0x18, 0x18, 0x24, 0x42, 0x00},
+      {0x42, 0x24, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00},
+      {0x7E, 0x02, 0x04, 0x18, 0x20, 0x40, 0x7E, 0x00}
+    };
+
+    (void)pvParameters;
+
+    for (;;) {
+      for (uint8_t letter = 0; letter < 26; ++letter) {
+        for (uint8_t row = 0; row < 8; ++row) {
+          if (MAX7219_WriteRegister(&hmax7219, MAX7219_REG_DIGIT0 + row, alphabet[letter][row]) != HAL_OK) {
+            Error_Handler();
+          }
+        }
+        vTaskDelay(pdMS_TO_TICKS(750));
+      }
+    }
+  }
 
 static void Boot_Status_Blink(void)
 {
@@ -107,42 +202,51 @@ static void Boot_Status_Blink(void)
 }
 
 /**
-  * @brief System Clock Configuration (180 MHz Core Clock from HSE 8MHz Crystal)
+  * @brief System Clock Configuration (180 MHz Core Clock from HSI)
   */
-void SystemClock_Config(void) {
-    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-    __HAL_RCC_PWR_CLK_ENABLE();
-    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+  /** Configure the main internal regulator output voltage */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-    RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-    RCC_OscInitStruct.PLL.PLLM = 8;
-    RCC_OscInitStruct.PLL.PLLN = 360;
-    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-    RCC_OscInitStruct.PLL.PLLQ = 2;
-    RCC_OscInitStruct.PLL.PLLR = 2;
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
-        Error_Handler();
-    }
+  /** Initializes the RCC Oscillators: Enable HSI and configure PLL */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 180;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    if (HAL_PWREx_EnableOverDrive() != HAL_OK) {
-        Error_Handler();
-    }
+  /** Activate the Over-Drive mode */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-                                | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+  /** Initializes CPU, AHB and APB buses clocks */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK) {
-        Error_Handler();
-    }
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**

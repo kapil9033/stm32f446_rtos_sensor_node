@@ -31,16 +31,16 @@ Key capabilities include:
 
 Below is the complete hardware pin connection table connecting the NUCLEO-F446RE board to external peripherals:
 
-### 1. ADXL345 Accelerometer (SPI Interface)
+### 1. ADXL345 Accelerometer (I2C Interface)
 
 | ADXL345 Pin | STM32F446RE Pin | Signal Function |
 | :--- | :--- | :--- |
-| **VCC** | 3.3V / 5V | Power Supply |
+| **VCC** | 3.3V | Power Supply |
 | **GND** | GND | Ground |
-| **CS** | PB6 / User Selected | Chip Select (Software GPIO) |
-| **SDO** | PA6 | SPI1_MISO |
-| **SDA / SDI** | PA7 | SPI1_MOSI |
-| **SCL** | PA5 | SPI1_SCK |
+| **CS** | 3.3V | Select I2C mode |
+| **SDO / ALT ADDRESS** | GND | Select I2C address `0x53` |
+| **SDA / SDI** | PB9 | I2C1_SDA |
+| **SCL / SCLK** | PB8 | I2C1_SCL |
 
 ---
 
@@ -50,12 +50,16 @@ Below is the complete hardware pin connection table connecting the NUCLEO-F446RE
 | :--- | :--- | :--- |
 | **VCC** | 3.3V | Power Supply |
 | **GND** | GND | Ground |
-| **SDA** | PB9 / PB7 | I2C1_SDA (4.7kΩ Pull-up required) |
-| **SCL** | PB8 / PB6 | I2C1_SCL (4.7kΩ Pull-up required) |
+| **SDA** | PB9 | I2C1_SDA (4.7 kΩ pull-up to 3.3 V if not provided by module) |
+| **SCL** | PB8 | I2C1_SCL (4.7 kΩ pull-up to 3.3 V if not provided by module) |
+
+The DS3231 and ADXL345 share the I2C1 bus. Connect both devices' SDA pins to
+PB9 and both SCL pins to PB8. Keep pull-ups at 3.3 V; do not pull the STM32
+pins up to 5 V.
 
 ---
 
-### 3. MAX7219 Display Module (SPI / GPIO Bit-Bang Interface)
+### 3. MAX7219 Display Module (SPI1 Interface)
 
 | MAX7219 Pin | STM32F446RE Pin | Signal Function |
 | :--- | :--- | :--- |
@@ -147,3 +151,69 @@ You can flash the generated binary using OpenOCD or STM32CubeProgrammer:
 Bash
 openocd -f interface/stlink.cfg -f target/stm32f4x.cfg \
   -c "program build/stm32f446_rtos_sensor_node.elf verify reset exit"
+
+## Problem and Solution
+
+### Problem
+
+After flashing, the NUCLEO-F446RE user LED did not blink and the USART2 terminal
+remained silent. The firmware image was not a valid STM32 flash image: the build
+did not include the STM32F446 startup/vector-table assembly or a device linker
+script. The resulting binary did not place the initial stack pointer and reset
+handler at the flash base address (`0x08000000`). A read of the first flash
+words returned ELF metadata instead of Cortex-M vectors, so the MCU could not
+reach `main()`.
+
+In addition, `main()` had been temporarily replaced with an LED-only infinite
+loop. Even with a valid reset path, that version would not initialize USART2
+or start FreeRTOS and the CLI. Later diagnostic calls used an undefined
+`DBG_PRINT`, which stopped the build; two calls were also placed before USART2
+initialization. The boot LED test then exposed a SysTick ownership conflict:
+FreeRTOS had replaced the HAL SysTick handler, so `HAL_Delay()` in the
+pre-scheduler LED blink never advanced the HAL tick. Startup stalled before
+USART2 was initialized.
+
+### Solution
+
+- Added the STM32F446 startup source and `STM32F446RETx_FLASH.ld`, with the
+  vector table at `0x08000000`, 512 KiB of flash, and 128 KiB of SRAM.
+- Restored application initialization in `main()`: HAL and system clock,
+  peripherals, FreeRTOS synchronization objects, sensor/display/CLI tasks, and
+  the scheduler. Added the I2C and SPI pin/clock setup required by HAL.
+- Replaced the undefined debug-print calls with a USART2-backed helper and
+  initialize USART2 before sending diagnostic messages. The current clock
+  setup uses the internal HSI source.
+- Added a SysTick dispatcher that always advances the HAL tick and advances
+  the FreeRTOS tick only after the scheduler starts. This allows startup
+  delays and HAL timeout handling to work before the scheduler, without
+  stopping RTOS ticks afterward.
+- Added three brief LD2 (PA5) flashes at startup as a boot indicator. PA5 is
+  also SPI1 SCK, so it is not expected to keep blinking after SPI initialization.
+
+Build the firmware and verify its vector table before flashing:
+
+```sh
+cmake -S . -B build
+cmake --build build -j$(nproc)
+arm-none-eabi-objdump -s -j .isr_vector build/stm32f446_rtos_sensor_node.elf
+od -An -tx4 -N8 build/stm32f446_rtos_sensor_node.bin
+```
+
+The first binary word must be an SRAM address (`0x200xxxxx`); the second must
+be an odd flash address (`0x080xxxxx`). For the verified build from this fix,
+the words were `0x20020000` and `0x08001d51`. These addresses may change after
+subsequent code changes.
+
+Flash the generated binary as raw binary data at the flash base (do not pass an
+ELF file with the `bin` format):
+
+```sh
+openocd -f board/st_nucleo_f4.cfg \
+  -c "init" -c "reset halt" \
+  -c "flash write_image erase /home/stm32f446_rtos_sensor_node.bin 0x08000000 bin" \
+  -c "reset run" -c "shutdown"
+```
+
+At 115200 baud, the USART2 terminal should print the CLI startup banner and
+`STM32>` prompt. The firmware build and vector-table checks passed; the final
+hardware flash and terminal output must be confirmed on the connected board.
