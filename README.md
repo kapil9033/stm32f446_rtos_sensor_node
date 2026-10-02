@@ -5,7 +5,7 @@
 The primary objective of this project is to develop a modular, real-time embedded system on the **STM32F446RE** microcontroller running **FreeRTOS**. 
 
 Key capabilities include:
-- Concurrent sensor data acquisition (ADXL345 accelerometer, DS3231 RTC).
+- Concurrent sensor data acquisition (ADXL335 analog accelerometer, DS3231 RTC).
 - A Command Line Interface (CLI) task executing over UART for real-time monitoring and debugging.
 - Cross-platform, reproducible build system configuration using **CMake** and `arm-none-eabi-gcc`.
 - Vendor driver integration (STM32 HAL & ARM CMSIS) managed using Git Submodules.
@@ -17,7 +17,7 @@ Key capabilities include:
 | Component | Interface / Peripheral | MCU Pin / Connection | Description |
 | :--- | :--- | :--- | :--- |
 | **STM32F446RE Nucleo-64** | Board / MCU | N/A | Main Controller (Cortex-M4 @ 180MHz) |
-| **ADXL345** | I2C / SPI | Standard Peripheral Pins | 3-Axis Digital Accelerometer |
+| **ADXL335** | Analog outputs / ADC | PA0, PA1, PC0 | 3-Axis Analog Accelerometer |
 | **DS3231** | I2C | Standard Peripheral Pins | High-Precision Real-Time Clock (RTC) |
 | **MAX7219** | SPI / GPIO | Standard Peripheral Pins | LED Matrix / Display Driver |
 | **Debug / CLI Console** | USART / ST-LINK | USB (Virtual COM Port) | Interactive CLI shell and debug output |
@@ -31,16 +31,18 @@ Key capabilities include:
 
 Below is the complete hardware pin connection table connecting the NUCLEO-F446RE board to external peripherals:
 
-### 1. ADXL345 Accelerometer (I2C Interface)
+### 1. ADXL335 Accelerometer (Analog Interface)
 
-| ADXL345 Pin | STM32F446RE Pin | Signal Function |
+| ADXL335 Pin | STM32F446RE Pin | Signal Function |
 | :--- | :--- | :--- |
 | **VCC** | 3.3V | Power Supply |
-| **GND** | GND | Ground |
-| **CS** | 3.3V | Select I2C mode |
-| **SDO / ALT ADDRESS** | GND | Select I2C address `0x53` |
-| **SDA / SDI** | PB9 | I2C1_SDA |
-| **SCL / SCLK** | PB8 | I2C1_SCL |
+| **GND** | GND | Common Ground |
+| **X-OUT** | PA0 | ADC1_IN0 |
+| **Y-OUT** | PA1 | ADC1_IN1 |
+| **Z-OUT** | PC0 | ADC1_IN10 |
+
+Power the ADXL335 from 3.3V and connect all grounds together. Its analog
+outputs must stay within the STM32 ADC input range (0 to 3.3V).
 
 ---
 
@@ -53,9 +55,14 @@ Below is the complete hardware pin connection table connecting the NUCLEO-F446RE
 | **SDA** | PB9 | I2C1_SDA (4.7 kΩ pull-up to 3.3 V if not provided by module) |
 | **SCL** | PB8 | I2C1_SCL (4.7 kΩ pull-up to 3.3 V if not provided by module) |
 
-The DS3231 and ADXL345 share the I2C1 bus. Connect both devices' SDA pins to
-PB9 and both SCL pins to PB8. Keep pull-ups at 3.3 V; do not pull the STM32
-pins up to 5 V.
+The DS3231 connects to I2C1 on PB9 (SDA) and PB8 (SCL). Use pull-ups to 3.3V
+if they are not already provided by the RTC module; do not pull STM32 pins up
+to 5V.
+
+The firmware reads the ADXL335 through ADC1 and `get-accel` reports raw ADC
+counts and approximate millivolts for each axis. Millivolts use a nominal 3.3V
+ADC reference; the command does not calibrate the sensor's zero-g offset or
+convert the readings to acceleration units.
 
 ---
 

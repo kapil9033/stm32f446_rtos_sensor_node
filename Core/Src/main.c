@@ -6,7 +6,7 @@
 #include "queue.h"
 #include "string.h"
 #include "ds3231.h"
-#include "adxl345.h"
+#include "adxl335.h"
 #include "max7219.h"
 #include "sensor_tasks.h"
 #include "cli_task.h"
@@ -15,6 +15,7 @@
 I2C_HandleTypeDef hi2c1;
 DMA_HandleTypeDef hdma_i2c1_rx;
 DMA_HandleTypeDef hdma_i2c1_tx;
+ADC_HandleTypeDef hadc1;
 
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_tx;
@@ -28,6 +29,7 @@ MAX7219_HandleTypeDef hmax7219;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
+static void MX_ADC1_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
@@ -72,6 +74,7 @@ int main(void)
 
     MX_GPIO_Init();
     MX_DMA_Init();
+    MX_ADC1_Init();
     MX_USART2_UART_Init();
     Debug_Print("\r\nUSART2 initialized\r\n");
 
@@ -86,7 +89,6 @@ int main(void)
     MAX7219_RunSelfTest();
 
     DS3231_Init(&hi2c1);
-    ADXL345_Init(&hi2c1, ADXL345_RANGE_4G);
 
     xI2CBusMutex = xSemaphoreCreateMutex();
     xSensorDataQueue = xQueueCreate(5, sizeof(SensorData_t));
@@ -103,6 +105,27 @@ int main(void)
 
     vTaskStartScheduler();
     Error_Handler();
+}
+
+static void MX_ADC1_Init(void)
+{
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.NbrOfDiscConversion = 0;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+
+  if (HAL_ADC_Init(&hadc1) != HAL_OK) {
+    Error_Handler();
+  }
 }
 
   static void Debug_Print(const char *message)
@@ -320,6 +343,25 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
         gpio.Alternate = GPIO_AF4_I2C1;
         HAL_GPIO_Init(GPIOB, &gpio);
     }
+}
+
+void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
+{
+  if (hadc->Instance == ADC1) {
+    GPIO_InitTypeDef gpio = {0};
+
+    __HAL_RCC_ADC1_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+
+    gpio.Pin = GPIO_PIN_0 | GPIO_PIN_1;
+    gpio.Mode = GPIO_MODE_ANALOG;
+    gpio.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOA, &gpio);
+
+    gpio.Pin = GPIO_PIN_0;
+    HAL_GPIO_Init(GPIOC, &gpio);
+  }
 }
 
 void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)

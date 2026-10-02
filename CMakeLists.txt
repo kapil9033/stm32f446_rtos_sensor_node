@@ -62,7 +62,7 @@ include_directories(
 # Core Sources
 file(GLOB_RECURSE CORE_SOURCES "${CMAKE_SOURCE_DIR}/Core/Src/*.c")
 file(GLOB_RECURSE APP_SOURCES "${CMAKE_SOURCE_DIR}/App/Tasks/Src/*.c")
-file(GLOB_RECURSE BSP_SOURCES "${CMAKE_SOURCE_DIR}/Drivers/BSP/Src/*.c")
+file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Drivers/BSP/Src/*.c")
 
 # HAL Driver Sources (Filter out *_template.c files)
 file(GLOB HAL_SOURCES "${CMAKE_SOURCE_DIR}/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal*.c")

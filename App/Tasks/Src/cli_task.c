@@ -1,11 +1,12 @@
 #include "cli_task.h"
 #include "sensor_tasks.h"
 #include "ds3231.h"
-#include "adxl345.h"
+#include "adxl335.h"
 #include <stdio.h>
 #include <string.h>
 
 extern I2C_HandleTypeDef hi2c1;
+extern ADC_HandleTypeDef hadc1;
 
 // Instantiate Ring Buffer
 RingBuffer_t xUartRxRingBuf = { .head = 0, .tail = 0 };
@@ -50,7 +51,7 @@ static void CLI_ProcessCommand(char *cmd) {
         CLI_Print("\r\n--- STM32 FreeRTOS CLI Commands ---\r\n");
         CLI_Print("  help      - Print list of commands\r\n");
         CLI_Print("  get-time  - Read DS3231 RTC Time\r\n");
-        CLI_Print("  get-accel - Read ADXL345 Acceleration\r\n");
+        CLI_Print("  get-accel - Read ADXL335 ADC outputs\r\n");
         CLI_Print("  stats     - Print FreeRTOS Task Runtime Stats\r\n\r\n");
     } 
     else if (strcmp(cmd, "get-time") == 0) {
@@ -75,24 +76,22 @@ static void CLI_ProcessCommand(char *cmd) {
         }
     } 
     else if (strcmp(cmd, "get-accel") == 0) {
-        if (xSemaphoreTake(xI2CBusMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            uint8_t raw_accel[6] = {0};
-            ADXL345_Data_t accel;
-            HAL_StatusTypeDef status = HAL_I2C_Mem_Read(&hi2c1, ADXL345_I2C_ADDR, ADXL345_REG_DATAX0, I2C_MEMADD_SIZE_8BIT, raw_accel, 6, 100);
-            xSemaphoreGive(xI2CBusMutex);
+        uint32_t samples[3] = {0};
+        HAL_StatusTypeDef status = ADXL335_ReadRaw(&hadc1, samples, 20);
 
-            if (status == HAL_OK) {
-                ADXL345_ParseData(raw_accel, &accel);
-                snprintf(out_buf, sizeof(out_buf), "\r\n[Accel mg] X: %.1f mg | Y: %.1f mg | Z: %.1f mg\r\n",
-                         (double)accel.x_mg, (double)accel.y_mg, (double)accel.z_mg);
-            } else {
-                snprintf(out_buf, sizeof(out_buf), "\r\n[ADXL345 I2C error] status=%u error=0x%08lx\r\n",
-                         (unsigned)status, (unsigned long)HAL_I2C_GetError(&hi2c1));
-            }
-            CLI_Print(out_buf);
+        if (status == HAL_OK) {
+            uint32_t x_mv = (samples[0] * 3300U + 2047U) / 4095U;
+            uint32_t y_mv = (samples[1] * 3300U + 2047U) / 4095U;
+            uint32_t z_mv = (samples[2] * 3300U + 2047U) / 4095U;
+            snprintf(out_buf, sizeof(out_buf),
+                     "\r\n[ADXL335] X: %lu (%lu mV) | Y: %lu (%lu mV) | Z: %lu (%lu mV)\r\n",
+                     (unsigned long)samples[0], (unsigned long)x_mv,
+                     (unsigned long)samples[1], (unsigned long)y_mv,
+                     (unsigned long)samples[2], (unsigned long)z_mv);
         } else {
-            CLI_Print("\r\n[Error] I2C Bus Busy\r\n");
+            snprintf(out_buf, sizeof(out_buf), "\r\n[ADXL335 ADC error] status=%u\r\n", (unsigned)status);
         }
+        CLI_Print(out_buf);
     } 
     else if (strcmp(cmd, "stats") == 0) {
         CLI_Print("\r\nTask          State  Prio  Stack  Num\r\n");
