@@ -12,15 +12,45 @@ Key capabilities include:
 
 ---
 
-## Hardware Setup
+## My Hardware Setup
+
+This project targets an **ST NUCLEO-F446RE** board. The DS3231 RTC is
+connected to the board's 3.3 V and ground rails and to I2C1 (SDA on PB9,
+SCL on PB8). The firmware also includes connections for an ADXL335
+accelerometer and a MAX7219 display, as listed below.
+
+### Development and programming setup
+
+- Development host: Ubuntu 26.04.1 LTS running in UTM on an Apple M4 MacBook.
+- Target programmer: Raspberry Pi 3 Model B Rev 1.2, booted with the Yocto
+  Raspberry Pi root filesystem exported from the Ubuntu VM at
+  `/srv/nfs/rpi-rootfs`.
+- The Raspberry Pi is connected by USB to the NUCLEO-F446RE to power it. SWD
+  programming uses separate wires from the Pi's Vilros T-Cobbler GPIO header
+  to the Nucleo's CN4 connector.
+
+The direct SWD wiring is:
+
+| SWD signal | NUCLEO-F446RE CN4 | Raspberry Pi / Vilros T-Cobbler |
+| --- | ---: | --- |
+| SWCLK | 2 | SCLK / BCM GPIO11 (physical header pin 23) |
+| GND | 3 | GND (for example, physical header pin 20) |
+| SWDIO | 4 | BCM GPIO25 (physical header pin 22) |
+| NRST (optional) | 5 | BCM GPIO24 (physical header pin 18) |
+| Unused in this wiring | 1, 6 | — |
+
+**GPIO numbers above are BCM numbers, not physical header pin numbers.**
+Physical header pin 25 is GND; do not connect CN4 NRST to physical pin 25.
+Keep the SWD wires short, share ground, and do not connect the Pi's 5 V rail
+to the Nucleo's SWD signals.
 
 | Component | Interface / Peripheral | MCU Pin / Connection | Description |
 | :--- | :--- | :--- | :--- |
-| **STM32F446RE Nucleo-64** | Board / MCU | N/A | Main Controller (Cortex-M4 @ 180MHz) |
-| **ADXL335** | Analog outputs / ADC | PA0, PA1, PC0 | 3-Axis Analog Accelerometer |
-| **DS3231** | I2C | Standard Peripheral Pins | High-Precision Real-Time Clock (RTC) |
-| **MAX7219** | SPI / GPIO | Standard Peripheral Pins | LED Matrix / Display Driver |
-| **Debug / CLI Console** | USART / ST-LINK | USB (Virtual COM Port) | Interactive CLI shell and debug output |
+| **STM32F446RE Nucleo-64** | MCU board | N/A | Main controller (Cortex-M4) |
+| **DS3231 RTC** | I2C1 | SDA: PB9, SCL: PB8; VCC: 3.3 V; GND: GND | Real-time clock |
+| **ADXL335** | ADC1 | X: PA0, Y: PA1, Z: PC0; VCC: 3.3 V; GND: GND | 3-axis analog accelerometer |
+| **MAX7219 display** | SPI1 / GPIO | DIN: PA7, CLK: PA5, CS: PB6; VCC: 5 V; GND: GND | LED matrix/display driver |
+| **Debug / CLI console** | USART2 via ST-LINK VCP | TX: PA2, RX: PA3; USB connection | Serial CLI at 115200 baud |
 
 ## NUCLEO-F446RE Board Pinout
 
@@ -196,14 +226,14 @@ convert the readings to acceleration units.
 - `arm-none-eabi-gcc`, `arm-none-eabi-g++`, `arm-none-eabi-objcopy`, and
   `arm-none-eabi-size`
 - GNU Make or Ninja
-- OpenOCD or STM32CubeProgrammer for flashing
+- OpenOCD for flashing
 
 On Ubuntu or Debian, install the build tools with:
 
 ```sh
 sudo apt update
 sudo apt install build-essential cmake gcc-arm-none-eabi \
-  binutils-arm-none-eabi gdb-multiarch git
+  binutils-arm-none-eabi gdb-multiarch git openocd
 ```
 
 ### Clone the repository
@@ -230,17 +260,57 @@ cmake --build build --parallel
 
 The `build/` directory contains the ELF, BIN, HEX, and MAP outputs.
 
-### Flash with OpenOCD
+### Flash from my Raspberry Pi / NFS setup
 
-With the Nucleo board connected over ST-LINK, run:
+Build the firmware in the Ubuntu VM from the project directory:
 
 ```sh
+cmake --build build --parallel
+sudo install -D -m 0644 build/stm32f446_rtos_sensor_node.elf \
+  /srv/nfs/rpi-rootfs/opt/stm32-firmware/stm32f446_rtos_sensor_node.elf
+```
+
+After the Raspberry Pi has booted from the Yocto root filesystem, make sure
+OpenOCD is included in that image (`command -v openocd`). Run the following
+on the Pi. This maps the Raspberry Pi's BCM GPIO11 to SWCLK, BCM GPIO25 to
+SWDIO, and BCM GPIO24 to the optional reset wire:
+
+```sh
+sudo openocd -f interface/raspberrypi-native.cfg \
+  -f target/stm32f4x.cfg \
+  -c "adapter gpio swclk 11" \
+  -c "adapter gpio swdio 25" \
+  -c "adapter gpio srst 24" \
+  -c "transport select swd" \
+  -c "reset_config srst_only srst_push_pull" \
+  -c "program /opt/stm32-firmware/stm32f446_rtos_sensor_node.elf verify reset exit"
+```
+
+Run OpenOCD as root if the Yocto image does not grant the current user GPIO
+access. The OpenOCD Raspberry Pi native interface normally uses BCM GPIO8 for
+SWDIO; this setup overrides it to GPIO25 to match the wiring above. Raspberry
+Pi GPIO25 has a default pull-down, so if SWD communication is unreliable,
+rewire CN4 SWDIO to BCM GPIO8 (physical header pin 24) and remove the
+`adapter gpio swdio 25` override.
+
+### General setup: laptop USB to onboard ST-LINK
+
+For the common setup, connect the NUCLEO-F446RE directly to the development
+computer with a USB cable connected to its onboard ST-LINK USB connector
+(CN1). This is different from wiring Pi GPIO to CN4. From the project
+directory on the laptop, build and flash with:
+
+```sh
+cmake --build build --parallel
 openocd -f interface/stlink.cfg -f target/stm32f4x.cfg \
   -c "program build/stm32f446_rtos_sensor_node.elf verify reset exit"
 ```
 
-Open a serial terminal on the ST-LINK Virtual COM Port at 115200 baud and use
-`get-time` to check the connected DS3231.
+This command assumes Linux and an onboard ST-LINK. For another operating
+system, board, or debug probe, use the appropriate OpenOCD interface and target
+configuration. With the Nucleo's ST-LINK USB connection, its Virtual COM Port
+is available for the USART2 CLI at 115200 baud; enter `get-time` to read the
+connected DS3231.
 
 ## Startup and Troubleshooting
 
