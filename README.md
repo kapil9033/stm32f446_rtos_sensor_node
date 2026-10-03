@@ -22,12 +22,106 @@ Key capabilities include:
 | **MAX7219** | SPI / GPIO | Standard Peripheral Pins | LED Matrix / Display Driver |
 | **Debug / CLI Console** | USART / ST-LINK | USB (Virtual COM Port) | Interactive CLI shell and debug output |
 
+## NUCLEO-F446RE Board Pinout
+
+The tables below use the connector labels printed on the Nucleo board. Pin
+numbers refer to the connector, not to STM32 package pins.
+
+### Power connector CN6
+
+| CN6 pin | Label | Description |
+| ---: | --- | --- |
+| 1 | NC | Not connected |
+| 2 | IOREF | 3.3 V I/O reference |
+| 3 | RESET | MCU reset |
+| 4 | +3V3 | 3.3 V power |
+| 5 | +5V | 5 V power |
+| 6-7 | GND | Ground |
+| 8 | VIN | External input voltage |
+
+### Analog connector CN8
+
+| CN8 pin | Arduino label | STM32 pin / function |
+| ---: | --- | --- |
+| 1 | A0 | PA0 / ADC1_IN0 |
+| 2 | A1 | PA1 / ADC1_IN1 |
+| 3 | A2 | PA4 / ADC1_IN4 |
+| 4 | A3 | PB0 / ADC1_IN8 |
+| 5 | A4 | PC1 / ADC1_IN11 |
+| 6 | A5 | PC0 / ADC1_IN10 |
+
+### Digital connectors CN5 and CN9
+
+| Connector | Pin | Board label | STM32 pin / function |
+| --- | ---: | --- | --- |
+| CN5 | 1 | D8 | PA9 |
+| CN5 | 2 | D9 | PC7 / TIM3_CH2, TIM8_CH2 |
+| CN5 | 3 | D10 | PB6 / SPI1 chip select (GPIO) |
+| CN5 | 4 | D11 | PA7 / SPI1_MOSI |
+| CN5 | 5 | D12 | PA6 / SPI1_MISO |
+| CN5 | 6 | D13 | PA5 / SPI1_SCK, onboard LD2 |
+| CN5 | 7 | GND | Ground |
+| CN5 | 8 | AVDD | Analog supply reference |
+| CN5 | 9 | D14 / SDA | PB9 / I2C1_SDA |
+| CN5 | 10 | D15 / SCL | PB8 / I2C1_SCL |
+| CN9 | 1 | D0 / RX | PA3 / USART2_RX (ST-LINK VCP) |
+| CN9 | 2 | D1 / TX | PA2 / USART2_TX (ST-LINK VCP) |
+| CN9 | 3 | D2 | PA10 |
+| CN9 | 4 | D3 | PB3 / TIM2_CH2 |
+| CN9 | 5 | D4 | PB5 |
+| CN9 | 6 | D5 | PB4 / TIM3_CH1 |
+| CN9 | 7 | D6 | PB10 / TIM2_CH3 |
+| CN9 | 8 | D7 | PA8 |
+
+### ST morpho headers CN7 and CN10
+
+| Pin | CN7 signal | Pin | CN10 signal |
+| ---: | --- | ---: | --- |
+| 1 | PC10 | 1 | PC9 |
+| 2 | PC11 | 2 | PC8 |
+| 3 | PC12 | 3 | PB8 |
+| 4 | PD2 | 4 | PC6 |
+| 5 | VDD | 5 | PB9 |
+| 6 | E5V | 6 | PC5 |
+| 7 | BOOT0 | 7 | AVDD |
+| 8 | GND | 8 | U5V |
+| 9 | NC | 9 | GND |
+| 10 | NC | 10 | NC |
+| 11 | NC | 11 | PA5 |
+| 12 | IOREF | 12 | PA12 |
+| 13 | NRST | 13 | PA6 |
+| 14 | RESET | 14 | PA11 |
+| 15 | 3V3 | 15 | PA7 |
+| 16 | 3V3 | 16 | PB12 |
+| 17 | 5V | 17 | PB6 |
+| 18 | 5V | 18 | PB11 |
+| 19 | GND | 19 | PC7 |
+| 20 | GND | 20 | GND |
+| 21 | GND | 21 | PA9 |
+| 22 | GND | 22 | PB2 |
+| 23 | VIN | 23 | PA8 |
+| 24 | NC | 24 | PB1 |
+| 25 | NC | 25 | PB10 |
+| 26 | PA0 | 26 | PB15 |
+| 27 | PA1 | 27 | PB4 |
+| 28 | PA4 | 28 | PB14 |
+| 29 | PA4 | 29 | PB5 |
+| 30 | PB0 | 30 | PB13 |
+| 31 | PB0 | 31 | PB3 |
+| 32 | PC1 | 32 | AGND |
+| 33 | PC1 | 33 | PA10 |
+| 34 | PC0 | 34 | PC4 |
+| 35 | PC0 | 35 | PA2 |
+| 36 | PD2 | 36 | NC |
+| 37 | PD2 | 37 | PA3 |
+| 38 | PH0 | 38 | NC |
+
+Check the pin names against the silkscreen and the official NUCLEO-F446RE
+board documentation before wiring. Board revisions may differ.
+
 ---
 
-
----
-
-## Pinout Mapping
+## Peripheral Wiring
 
 Below is the complete hardware pin connection table connecting the NUCLEO-F446RE board to external peripherals:
 
@@ -55,9 +149,16 @@ outputs must stay within the STM32 ADC input range (0 to 3.3V).
 | **SDA** | PB9 | I2C1_SDA (4.7 kΩ pull-up to 3.3 V if not provided by module) |
 | **SCL** | PB8 | I2C1_SCL (4.7 kΩ pull-up to 3.3 V if not provided by module) |
 
-The DS3231 connects to I2C1 on PB9 (SDA) and PB8 (SCL). Use pull-ups to 3.3V
-if they are not already provided by the RTC module; do not pull STM32 pins up
-to 5V.
+Connect the DS3231 to I2C1: PB9 is SDA and PB8 is SCL. Power the module from
+3.3 V for this setup, connect grounds together, and leave its 32K and SQW pins
+unconnected. Use I2C pull-ups to 3.3 V if the module does not already provide
+them; do not pull the STM32 I/O lines up to 5 V.
+
+To test the RTC after flashing, open the board's ST-LINK Virtual COM Port at
+115200 baud, wait for the `STM32>` prompt, and enter `get-time`. A successful
+read prints the time and date. An `[RTC I2C error]` response means the MCU did
+not complete the register read; check power, ground, SDA/SCL wiring, and that
+the bus pull-ups go to 3.3 V.
 
 The firmware reads the ADXL335 through ADC1 and `get-accel` reports raw ADC
 counts and approximate millivolts for each axis. Millivolts use a nominal 3.3V
@@ -91,136 +192,72 @@ convert the readings to acceleration units.
 
 ### Prerequisites
 
-* `arm-none-eabi-gcc` toolchain
-* `cmake` (v3.22 or higher)
-* `ninja` or `make`
-* `stlink` / `openocd` (for flashing)
+- CMake 3.22 or newer
+- `arm-none-eabi-gcc`, `arm-none-eabi-g++`, `arm-none-eabi-objcopy`, and
+  `arm-none-eabi-size`
+- GNU Make or Ninja
+- OpenOCD or STM32CubeProgrammer for flashing
 
-### Cloning the Repository
-
-Because this project uses Git submodules for HAL and CMSIS driver dependencies, clone recursively:
-
-```bash
-git clone --recursive git@github.com:kapil9033/stm32f446_rtos_sensor_node.git
-cd stm32f446_rtos_sensor_node
-
-
-## Prerequisites & Toolchain Setup
-
-Ensure the following tools are installed on your build host:
-
-- **ARM GNU Toolchain**: `arm-none-eabi-gcc`, `arm-none-eabi-g++`, `arm-none-eabi-objcopy`, `arm-none-eabi-size`
-- **Build System**: `cmake` (>= 3.22) and `make` / `gmake`
-- **Version Control**: `git`
-
-### Installing Toolchain (Ubuntu/Debian)
-
-```bash
-sudo apt update
-sudo apt install build-essential cmake gcc-arm-none-eabi binutils-arm-none-eabi gdb-multiarch git
-
-
-### Repository Cloning
-Since vendor drivers (HAL, CMSIS) are integrated as Git submodules, clone the repository recursively:
-
-Bash
-git clone --recursive git@github.com:kapil9033/stm32f446_rtos_sensor_node.git
-cd stm32f446_rtos_sensor_node
-
-# If you already cloned without --recursive, initialize submodules using:
-
-Bash
-git submodule update --init --recursive
-### Building the Project
-## Generate Build System:
-
-Bash
-cmake -B build -G "Unix Makefiles"
-# Compile Project:
-
-Bash
-cmake --build build -j$(nproc)
-### Generated Artifacts:
-## Upon a successful build, the following files will be available inside the build/ directory:
-
-stm32f446_rtos_sensor_node.elf: ELF executable containing full symbol information.
-
-stm32f446_rtos_sensor_node.bin: Raw binary payload ready for flashing.
-
-stm32f446_rtos_sensor_node.hex: Intel HEX file format.
-
-stm32f446_rtos_sensor_node.map: Memory usage mapping layout.
-
-### Flashing & Debugging
-You can flash the generated binary using OpenOCD or STM32CubeProgrammer:
-
-### Flashing with OpenOCD
-Bash
-openocd -f interface/stlink.cfg -f target/stm32f4x.cfg \
-  -c "program build/stm32f446_rtos_sensor_node.elf verify reset exit"
-
-## Problem and Solution
-
-### Problem
-
-After flashing, the NUCLEO-F446RE user LED did not blink and the USART2 terminal
-remained silent. The firmware image was not a valid STM32 flash image: the build
-did not include the STM32F446 startup/vector-table assembly or a device linker
-script. The resulting binary did not place the initial stack pointer and reset
-handler at the flash base address (`0x08000000`). A read of the first flash
-words returned ELF metadata instead of Cortex-M vectors, so the MCU could not
-reach `main()`.
-
-In addition, `main()` had been temporarily replaced with an LED-only infinite
-loop. Even with a valid reset path, that version would not initialize USART2
-or start FreeRTOS and the CLI. Later diagnostic calls used an undefined
-`DBG_PRINT`, which stopped the build; two calls were also placed before USART2
-initialization. The boot LED test then exposed a SysTick ownership conflict:
-FreeRTOS had replaced the HAL SysTick handler, so `HAL_Delay()` in the
-pre-scheduler LED blink never advanced the HAL tick. Startup stalled before
-USART2 was initialized.
-
-### Solution
-
-- Added the STM32F446 startup source and `STM32F446RETx_FLASH.ld`, with the
-  vector table at `0x08000000`, 512 KiB of flash, and 128 KiB of SRAM.
-- Restored application initialization in `main()`: HAL and system clock,
-  peripherals, FreeRTOS synchronization objects, sensor/display/CLI tasks, and
-  the scheduler. Added the I2C and SPI pin/clock setup required by HAL.
-- Replaced the undefined debug-print calls with a USART2-backed helper and
-  initialize USART2 before sending diagnostic messages. The current clock
-  setup uses the internal HSI source.
-- Added a SysTick dispatcher that always advances the HAL tick and advances
-  the FreeRTOS tick only after the scheduler starts. This allows startup
-  delays and HAL timeout handling to work before the scheduler, without
-  stopping RTOS ticks afterward.
-- Added three brief LD2 (PA5) flashes at startup as a boot indicator. PA5 is
-  also SPI1 SCK, so it is not expected to keep blinking after SPI initialization.
-
-Build the firmware and verify its vector table before flashing:
+On Ubuntu or Debian, install the build tools with:
 
 ```sh
-cmake -S . -B build
-cmake --build build -j$(nproc)
+sudo apt update
+sudo apt install build-essential cmake gcc-arm-none-eabi \
+  binutils-arm-none-eabi gdb-multiarch git
+```
+
+### Clone the repository
+
+HAL and CMSIS dependencies are included as Git submodules:
+
+```sh
+git clone --recursive git@github.com:kapil9033/stm32f446_rtos_sensor_node.git
+cd stm32f446_rtos_sensor_node
+```
+
+If the repository was cloned without submodules, initialize them with:
+
+```sh
+git submodule update --init --recursive
+```
+
+### Build
+
+```sh
+cmake -S . -B build -G "Unix Makefiles"
+cmake --build build --parallel
+```
+
+The `build/` directory contains the ELF, BIN, HEX, and MAP outputs.
+
+### Flash with OpenOCD
+
+With the Nucleo board connected over ST-LINK, run:
+
+```sh
+openocd -f interface/stlink.cfg -f target/stm32f4x.cfg \
+  -c "program build/stm32f446_rtos_sensor_node.elf verify reset exit"
+```
+
+Open a serial terminal on the ST-LINK Virtual COM Port at 115200 baud and use
+`get-time` to check the connected DS3231.
+
+## Startup and Troubleshooting
+
+The firmware includes the STM32F446 startup/vector table and linker script.
+Three brief flashes of the Nucleo LD2 LED indicate startup; PA5 is also used
+for SPI1 SCK, so the LED is not expected to continue blinking after SPI
+initialization. The USART2 CLI is available through the ST-LINK Virtual COM
+Port at 115200 baud.
+
+If the board does not start, inspect the vector table and the first two words
+of the generated binary:
+
+```sh
 arm-none-eabi-objdump -s -j .isr_vector build/stm32f446_rtos_sensor_node.elf
 od -An -tx4 -N8 build/stm32f446_rtos_sensor_node.bin
 ```
 
-The first binary word must be an SRAM address (`0x200xxxxx`); the second must
-be an odd flash address (`0x080xxxxx`). For the verified build from this fix,
-the words were `0x20020000` and `0x08001d51`. These addresses may change after
-subsequent code changes.
-
-Flash the generated binary as raw binary data at the flash base (do not pass an
-ELF file with the `bin` format):
-
-```sh
-openocd -f board/st_nucleo_f4.cfg \
-  -c "init" -c "reset halt" \
-  -c "flash write_image erase /home/stm32f446_rtos_sensor_node.bin 0x08000000 bin" \
-  -c "reset run" -c "shutdown"
-```
-
-At 115200 baud, the USART2 terminal should print the CLI startup banner and
-`STM32>` prompt. The firmware build and vector-table checks passed; the final
-hardware flash and terminal output must be confirmed on the connected board.
+The first word should be an SRAM address (`0x200xxxxx`); the second should be
+an odd flash address (`0x080xxxxx`). Use the build and OpenOCD commands above
+to regenerate and flash the firmware.
